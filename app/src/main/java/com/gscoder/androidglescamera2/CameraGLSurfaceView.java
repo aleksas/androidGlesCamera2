@@ -4,14 +4,14 @@ import android.content.Context;
 import android.opengl.GLSurfaceView;
 import android.view.SurfaceHolder;
 
-public class GLSurfaceViewEx extends GLSurfaceView {
-    CameraRenderer mRenderer;
+public class CameraGLSurfaceView extends GLSurfaceView {
+    CameraRenderer mCameraRenderer;
 
-    GLSurfaceViewEx(Context context ) {
+    CameraGLSurfaceView(Context context ) {
         super ( context );
-        mRenderer = new CameraRenderer(this);
+        mCameraRenderer = new CameraRenderer(this);
         setEGLContextClientVersion ( 2 );
-        setRenderer ( mRenderer );
+        setRenderer (mCameraRenderer);
         setRenderMode ( GLSurfaceView.RENDERMODE_WHEN_DIRTY );
     }
 
@@ -30,12 +30,12 @@ public class GLSurfaceViewEx extends GLSurfaceView {
     @Override
     public void onResume() {
         super.onResume();
-        mRenderer.onResume();
+        mCameraRenderer.onResume();
     }
 
     @Override
     public void onPause() {
-        mRenderer.onPause();
+        mCameraRenderer.onPause();
         super.onPause();
     }
 }

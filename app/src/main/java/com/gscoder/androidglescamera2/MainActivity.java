@@ -7,7 +7,7 @@ import android.view.Window;
 import android.view.WindowManager;
 
 public class MainActivity extends Activity {
-    private GLSurfaceViewEx mView;
+    private CameraGLSurfaceView mView;
 
     @Override
     public void onCreate ( Bundle savedInstanceState) {
@@ -17,7 +17,7 @@ public class MainActivity extends Activity {
         ui = ui | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
         getWindow().getDecorView().setSystemUiVisibility(ui);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        mView = new GLSurfaceViewEx(this);
+        mView = new CameraGLSurfaceView(this);
         setContentView ( mView );
     }
 

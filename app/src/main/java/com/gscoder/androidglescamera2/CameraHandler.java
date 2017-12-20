@@ -32,6 +32,10 @@ public class CameraHandler {
 
     protected SurfaceTexture mSurfaceTexture;
 
+    public void setSurfaceTexture(SurfaceTexture surfaceTexture) {
+        mSurfaceTexture = surfaceTexture;
+    }
+
     void calcPreviewSize(Context context, final int width, final int height) {
         CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
         try {

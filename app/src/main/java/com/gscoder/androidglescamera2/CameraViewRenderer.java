@@ -13,7 +13,7 @@ import java.nio.FloatBuffer;
 
 import javax.microedition.khronos.opengles.GL10;
 
-public class CameraRenderer extends CameraHandler implements GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
+public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
     private final String cameraVertexShader = "" +
             "attribute vec2 vPosition;\n" +
             "attribute vec2 vTexCoord;\n" +
@@ -41,9 +41,12 @@ public class CameraRenderer extends CameraHandler implements GLSurfaceView.Rende
     private boolean mUpdateSurfaceTexture = false;
 
     CameraGLSurfaceView mView;
+    CameraHandler mCameraHandler;
+    SurfaceTexture mSurfaceTexture;
 
-    CameraRenderer(CameraGLSurfaceView view ) {
+    CameraViewRenderer(CameraGLSurfaceView view, CameraHandler cameraHandler) {
         mView = view;
+        mCameraHandler = cameraHandler;
 
         float[] vtmp = {
                 1.0f, -1.0f,
@@ -69,14 +72,14 @@ public class CameraRenderer extends CameraHandler implements GLSurfaceView.Rende
     }
 
     public void onResume() {
-        startBackgroundThread();
+        mCameraHandler.startBackgroundThread();
     }
 
     public void onPause() {
         mGLInit = false;
         mUpdateSurfaceTexture = false;
-        closeCamera();
-        stopBackgroundThread();
+        mCameraHandler.closeCamera();
+        mCameraHandler.stopBackgroundThread();
     }
 
     @Override
@@ -85,6 +88,8 @@ public class CameraRenderer extends CameraHandler implements GLSurfaceView.Rende
         mSurfaceTexture = new SurfaceTexture ( hTex[0] );
         mSurfaceTexture.setOnFrameAvailableListener(this);
 
+        mCameraHandler.setSurfaceTexture(mSurfaceTexture);
+
         GLES20.glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // Clear white
 
         hProgram = loadShader (cameraVertexShader, cameraFragmentShader);
@@ -92,8 +97,8 @@ public class CameraRenderer extends CameraHandler implements GLSurfaceView.Rende
         Point ss = new Point();
         mView.getDisplay().getRealSize(ss);
 
-        calcPreviewSize(mView.getContext(), ss.x, ss.y);
-        openCamera(mView.getContext());
+        mCameraHandler.calcPreviewSize(mView.getContext(), ss.x, ss.y);
+        mCameraHandler.openCamera(mView.getContext());
 
         mGLInit = true;
     }

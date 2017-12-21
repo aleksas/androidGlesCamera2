@@ -1,11 +1,20 @@
 package com.gscoder.androidglescamera2;
 
+import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.SurfaceTexture;
+import android.hardware.SensorManager;
+import android.hardware.camera2.CameraCharacteristics;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
+import android.opengl.Matrix;
 import android.util.Log;
+import android.view.Display;
+import android.view.OrientationEventListener;
+import android.view.Surface;
+import android.view.WindowManager;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -18,11 +27,12 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
     private final String cameraVertexShader = "" +
             "attribute vec2 vPosition;\n" +
-            "attribute vec2 vTexCoord;\n" +
-            "uniform mat4 uTexMatrix;\n" +
+            "attribute vec4 vTexCoord;\n" +
+            "uniform mat4 uTexTransformMatrix;\n" +
+            "uniform mat4 uTexRotateMatrix;\n" +
             "varying vec2 texCoord;\n" +
             "void main() {\n" +
-            "  texCoord = vTexCoord;\n" +
+            "  texCoord = (uTexRotateMatrix * (uTexTransformMatrix * vTexCoord)).xy;\n" +
             "  gl_Position = vec4 ( vPosition.x, vPosition.y, 0.0, 1.0 );\n" +
             "}";
 
@@ -43,28 +53,34 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private boolean mGLInit = false;
     private boolean mUpdateSurfaceTexture = false;
 
-    private float[] mTexMatrix = new float[] {1, 0, 0, 0,   0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1};
+    private float[] mTexTransformMatrix = new float[] {1, 0, 0, 0,   0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1};
+    private float[] mTexRotateMatrix = new float[] {1, 0, 0, 0,   0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1};
 
-    CameraGLSurfaceView mView;
-    CameraHandler mCameraHandler;
-    SurfaceTexture mSurfaceTexture;
+    private CameraGLSurfaceView mView;
+    private CameraHandler mCameraHandler;
+    private SurfaceTexture mSurfaceTexture;
+
+    private WindowManager mWindowManager;
+    private OrientationEventListener mOrientationListener;
+
+    private int mDeviceDefaultOrientation = -1;
 
     CameraViewRenderer(CameraGLSurfaceView view, CameraHandler cameraHandler) {
         mView = view;
         mCameraHandler = cameraHandler;
 
         float[] vtmp = {
-                1.0f, -1.0f,
-                -1.0f,-1.0f,
-                1.0f, 1.0f,
-                -1.0f, 1.0f
+                -1.0f, -1.0f,   // 0 bottom left  A
+                1.0f, -1.0f,   // 1 bottom right  B
+                -1.0f,  1.0f,   // 2 top left     C
+                1.0f,  1.0f,   // 3 top right     D
         };
 
         float[] ttmp = {
-                1.0f, 1.0f,
-                0.0f, 1.0f,
-                1.0f, 0.0f,
-                0.0f, 0.0f
+                0.0f, 0.0f,     // 0 bottom left
+                1.0f, 0.0f,     // 1 bottom right
+                0.0f, 1.0f,     // 2 top left
+                1.0f, 1.0f      // 3 top right
         };
 
         pVertex = ByteBuffer.allocateDirect(vtmp.length * Float.SIZE / 8).order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -74,10 +90,25 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         pTexCoord = ByteBuffer.allocateDirect(ttmp.length * Float.SIZE / 8).order(ByteOrder.nativeOrder()).asFloatBuffer();
         pTexCoord.put ( ttmp );
         pTexCoord.position(0);
+
+        Context ctx = mView.getContext();
+
+        mWindowManager = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+        mOrientationListener = new OrientationListener(ctx);
+
+        mDeviceDefaultOrientation = getDeviceDefaultOrientation();
     }
 
     public void onResume() {
         mCameraHandler.startBackgroundThread();
+
+        if (mOrientationListener.canDetectOrientation() == true) {
+            Log.v(TAG, "Can detect orientation");
+            mOrientationListener.enable();
+        } else {
+            Log.v(TAG, "Cannot detect orientation");
+            mOrientationListener.disable();
+        }
     }
 
     public void onPause() {
@@ -85,6 +116,7 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         mUpdateSurfaceTexture = false;
         mCameraHandler.closeCamera();
         mCameraHandler.stopBackgroundThread();
+        mOrientationListener.disable();
     }
 
     @Override
@@ -92,6 +124,7 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         initTex();
         mSurfaceTexture = new SurfaceTexture ( hTex[0] );
         mSurfaceTexture.setOnFrameAvailableListener(this);
+        mSurfaceTexture.getTransformMatrix(mTexTransformMatrix);
 
         mCameraHandler.setSurfaceTexture(mSurfaceTexture);
 
@@ -107,6 +140,8 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         mCameraHandler.openCamera(mView.getContext());
 
         mGLInit = true;
+
+        updateViewport();
     }
 
     public void onDrawFrame ( GL10 unused ) {
@@ -118,16 +153,26 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
             if (mUpdateSurfaceTexture) {
                 mSurfaceTexture.updateTexImage();
                 mUpdateSurfaceTexture = false;
+
+                updateViewport();
             }
         }
+
+        //mSurfaceTexture.getTransformMatrix(mTexTransformMatrix);
 
         GLES20.glUseProgram(hProgram);
         checkGlError("glUseProgram");
 
-        int tmh = GLES20.glGetUniformLocation ( hProgram, "uTexMatrix" );
+        int trmh = GLES20.glGetUniformLocation ( hProgram, "uTexRotateMatrix" );
         checkGlError("glGetUniformLocation");
 
-        GLES20.glUniformMatrix4fv(tmh, 1, false, mTexMatrix, 0);
+        GLES20.glUniformMatrix4fv(trmh, 1, false, mTexRotateMatrix, 0);
+        checkGlError("glUniformMatrix4fv");
+
+        int ttmh = GLES20.glGetUniformLocation ( hProgram, "uTexTransformMatrix" );
+        checkGlError("glGetUniformLocation");
+
+        GLES20.glUniformMatrix4fv(ttmh, 1, false, mTexTransformMatrix, 0);
         checkGlError("glUniformMatrix4fv");
 
         int ph = GLES20.glGetAttribLocation(hProgram, "vPosition");
@@ -165,8 +210,50 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     }
 
     public void onSurfaceChanged (GL10 unused, int width, int height ) {
-        GLES20.glViewport(0, 0, width, height);
-        checkGlError("glViewport");
+        updateTextureRotationMatrix();
+        updateViewport();
+    }
+
+    int textureWidth = 0;
+    int textureHeight = 0;
+
+    private void updateViewport()
+    {
+
+        boolean swap = mView.getContext().getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
+
+        float width  = mCameraHandler.getPreviewSize().getWidth();
+        float height = mCameraHandler.getPreviewSize().getHeight();
+
+        float surfaceWidth  = swap ? mView.getHeight() : mView.getWidth();
+        float surfaceHeight = swap ? mView.getWidth()  : mView.getHeight();
+
+        float scaleImage = width / height;
+        float scaleSurface = surfaceWidth / surfaceHeight;
+
+        int newTextureWidth, newTextureHeight;
+
+        if (scaleImage > scaleSurface) {
+            newTextureWidth  = (int) surfaceWidth;
+            newTextureHeight = (int) (surfaceWidth / scaleImage);
+        }
+        else {
+            newTextureWidth  = (int) (surfaceHeight * scaleImage);
+            newTextureHeight = (int) surfaceHeight;
+        }
+
+        if (textureWidth != newTextureWidth || textureHeight != newTextureHeight) {
+            int x, y;
+
+            x = ((int) surfaceWidth  - newTextureWidth)  / 2;
+            y = ((int) surfaceHeight - newTextureHeight) / 2;
+
+            GLES20.glViewport(swap ? y : x, swap ? x : y, swap ? newTextureHeight : newTextureWidth, swap ? newTextureWidth : newTextureHeight);
+            checkGlError("glViewport");
+
+            textureWidth  = newTextureWidth;
+            textureHeight = newTextureHeight;
+        }
     }
 
     private void initTex() {
@@ -195,6 +282,67 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         mView.requestRender();
     }
 
+    public int getDeviceDefaultOrientation() {
+        Context ctx = mView.getContext();
+        WindowManager windowManager =  (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+
+        Configuration config = ctx.getResources().getConfiguration();
+
+        int rotation = windowManager.getDefaultDisplay().getRotation();
+
+        if ( ((rotation == Surface.ROTATION_0 ||
+                rotation == Surface.ROTATION_180) &&
+                config.orientation == Configuration.ORIENTATION_LANDSCAPE) ||
+                ((rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) &&
+                config.orientation == Configuration.ORIENTATION_PORTRAIT)) {
+            return Configuration.ORIENTATION_LANDSCAPE;
+        } else {
+            return Configuration.ORIENTATION_PORTRAIT;
+        }
+    }
+
+    private void updateTextureRotationMatrix() {
+
+        Display display = mWindowManager.getDefaultDisplay();
+
+        float offset = 0;
+        switch (display.getRotation()) {
+            case Surface.ROTATION_180:
+            case Surface.ROTATION_270:
+                offset = 180;
+                break;
+        }
+
+        boolean frontFacing = mCameraHandler.getFacing() == CameraCharacteristics.LENS_FACING_FRONT;
+
+        if (mView.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+            Matrix.setRotateM(mTexRotateMatrix, 0, 90.0f + offset, 0f, 0f, 1f);
+            Matrix.transposeM(mTexRotateMatrix, 0, mTexRotateMatrix,  0);
+        } else {
+            Matrix.setRotateM(mTexRotateMatrix, 0, 0.0f + offset, 0f, 0f, 1f);
+            //Matrix.transposeM(mTexRotateMatrix, 0, mTexRotateMatrix,  0);
+        }
+
+/*
+        if (mView.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+            Matrix.setRotateM(mTexTransformMatrix, 0, 90.0f + offset, 0f, 0f, 1f);
+            NVideoFormat format = CameraDeviceManager.getCamera(mCameraId).getCurrentFormat();
+            float ar = (float) format.getWidth() / format.getHeight();
+            if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                Matrix.scaleM(mModelOrientation, 0, mCameraOrientation, 0, ar, -ar, 1f);
+            } else {
+                Matrix.scaleM(mModelOrientation, 0, mCameraOrientation, 0, ar, ar, 1f);
+            }
+        } else {
+            //Matrix.setRotateM(mTexTransformMatrix, 0, 0.0f + offset, 0f, 0f, 1f);
+            if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                Matrix.scaleM(mModelOrientation, 0, mCameraOrientation, 0, -1, 1, 1f);
+            } else {
+                Matrix.scaleM(mModelOrientation, 0, mCameraOrientation, 0, 1f, 1f, 1f);
+            }
+        }*/
+    }
+
     private static int loadShader ( String vss, String fss ) {
         int vshader = GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER);
         checkGlError("glCreateShader");
@@ -208,12 +356,12 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         int[] compiled = new int[1];
         GLES20.glGetShaderiv(vshader, GLES20.GL_COMPILE_STATUS, compiled, 0);
         if (compiled[0] == 0) {
-            checkGlError("glGetShaderiv");
-
             Log.e("Shader", "Could not compile vertex shader");
             Log.v("Shader", "Could not compile vertex shader:"+GLES20.glGetShaderInfoLog(vshader));
+
             GLES20.glDeleteShader(vshader);
-            checkGlError("glDeleteShader");
+
+            checkGlError("glGetShaderiv");
 
             vshader = 0;
         }
@@ -228,14 +376,14 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         checkGlError("glCompileShader");
 
         GLES20.glGetShaderiv(fshader, GLES20.GL_COMPILE_STATUS, compiled, 0);
-        checkGlError("glGetShaderiv");
 
         if (compiled[0] == 0) {
             Log.e("Shader", "Could not compile fragment shader");
             Log.v("Shader", "Could not compile fragment shader:"+GLES20.glGetShaderInfoLog(fshader));
 
             GLES20.glDeleteShader(fshader);
-            checkGlError("glDeleteShader");
+
+            checkGlError("glGetShaderiv");
 
             fshader = 0;
         }
@@ -264,4 +412,16 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
             throw new RuntimeException(msg);
         }
     }
+
+    class OrientationListener extends OrientationEventListener {
+        OrientationListener(Context context) {
+            super(context, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+
+        @Override
+        public void onOrientationChanged(int orientation) {
+            //Log.v(TAG, "Orientation changed to " + orientation);
+            //updateTextureMatrix(orientation);
+        }
+    };
 }

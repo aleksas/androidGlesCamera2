@@ -30,10 +30,20 @@ public class CameraHandler {
     private Handler mBackgroundHandler;
     private Semaphore mCameraOpenCloseLock = new Semaphore(1);
 
+    private int mFacing;
+
     protected SurfaceTexture mSurfaceTexture;
 
     public void setSurfaceTexture(SurfaceTexture surfaceTexture) {
         mSurfaceTexture = surfaceTexture;
+    }
+
+    public int getFacing() {
+        return mFacing;
+    }
+
+    public Size getPreviewSize() {
+        return mPreviewSize;
     }
 
     void calcPreviewSize(Context context, final int width, final int height) {
@@ -41,9 +51,10 @@ public class CameraHandler {
         try {
             for (String cameraID : manager.getCameraIdList()) {
                 CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraID);
-                if (characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT)
+                if (characteristics.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_FRONT)
                     continue;
 
+                mFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
                 mCameraID = cameraID;
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                 for ( Size psize : map.getOutputSizes(SurfaceTexture.class)) {

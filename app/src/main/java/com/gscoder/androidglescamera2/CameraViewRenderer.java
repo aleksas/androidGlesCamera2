@@ -222,13 +222,16 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
         boolean swap = mView.getContext().getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
 
-        float width  = mCameraHandler.getPreviewSize().getWidth();
-        float height = mCameraHandler.getPreviewSize().getHeight();
+        float imageWidth  = mCameraHandler.getPreviewSize().getWidth();
+        float imageHeight = mCameraHandler.getPreviewSize().getHeight();
 
-        float surfaceWidth  = swap ? mView.getHeight() : mView.getWidth();
-        float surfaceHeight = swap ? mView.getWidth()  : mView.getHeight();
+        Point realSize = new Point();
+        mView.getDisplay().getRealSize(realSize);
 
-        float scaleImage = width / height;
+        float surfaceWidth  = realSize.x;
+        float surfaceHeight = realSize.y;
+
+        float scaleImage = imageWidth / imageHeight;
         float scaleSurface = surfaceWidth / surfaceHeight;
 
         int newTextureWidth, newTextureHeight;
@@ -248,7 +251,7 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
             x = ((int) surfaceWidth  - newTextureWidth)  / 2;
             y = ((int) surfaceHeight - newTextureHeight) / 2;
 
-            GLES20.glViewport(swap ? y : x, swap ? x : y, swap ? newTextureHeight : newTextureWidth, swap ? newTextureWidth : newTextureHeight);
+            GLES20.glViewport(x, y, newTextureWidth, newTextureHeight);
             checkGlError("glViewport");
 
             textureWidth  = newTextureWidth;
@@ -302,7 +305,7 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     }
 
     private void updateTextureRotationMatrix() {
-
+/*
         Display display = mWindowManager.getDefaultDisplay();
 
         float offset = 0;
@@ -316,13 +319,13 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         boolean frontFacing = mCameraHandler.getFacing() == CameraCharacteristics.LENS_FACING_FRONT;
 
         if (mView.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
-            Matrix.setRotateM(mTexRotateMatrix, 0, 90.0f + offset, 0f, 0f, 1f);
+            Matrix.setRotateM(mTexRotateMatrix, 0, 90.0f + offset, 0.f, 0f, 1f);
             Matrix.transposeM(mTexRotateMatrix, 0, mTexRotateMatrix,  0);
         } else {
             Matrix.setRotateM(mTexRotateMatrix, 0, 0.0f + offset, 0f, 0f, 1f);
             //Matrix.transposeM(mTexRotateMatrix, 0, mTexRotateMatrix,  0);
         }
-
+*/
 /*
         if (mView.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
             Matrix.setRotateM(mTexTransformMatrix, 0, 90.0f + offset, 0f, 0f, 1f);

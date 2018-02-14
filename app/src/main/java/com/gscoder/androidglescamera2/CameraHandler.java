@@ -1,6 +1,7 @@
 package com.gscoder.androidglescamera2;
 
 import android.content.Context;
+import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -9,8 +10,11 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.Image;
+import android.media.ImageReader;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Trace;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
@@ -24,15 +28,24 @@ public class CameraHandler {
     private CameraCaptureSession mCaptureSession;
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private String mCameraID;
-    private Size mPreviewSize = new Size( 1920, 1080 );
+    ///private Size mPreviewSize = new Size( 1920, 1080 );
+    private Size mPreviewSize = new Size( 640, 480 );
 
     private HandlerThread mBackgroundThread;
     private Handler mBackgroundHandler;
     private Semaphore mCameraOpenCloseLock = new Semaphore(1);
 
+    private ImageReader mPreviewReader;
+
     private int mFacing;
 
     protected SurfaceTexture mSurfaceTexture;
+
+    private ImageReader.OnImageAvailableListener mOnImageAvailableListener;
+
+    public CameraHandler(ImageReader.OnImageAvailableListener onImageAvailableListener) {
+        mOnImageAvailableListener = onImageAvailableListener;
+    }
 
     public void setSurfaceTexture(SurfaceTexture surfaceTexture) {
         mSurfaceTexture = surfaceTexture;
@@ -143,9 +156,18 @@ public class CameraHandler {
             Surface surface = new Surface(mSurfaceTexture);
 
             mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            mPreviewRequestBuilder.addTarget(surface);
 
-            mCameraDevice.createCaptureSession(Arrays.asList(surface),
+            // Create the reader for the preview frames.
+            mPreviewReader =
+                    ImageReader.newInstance(
+                            mPreviewSize.getWidth(), mPreviewSize.getHeight(), ImageFormat.YUV_420_888, 2);
+
+            mPreviewReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
+
+            mPreviewRequestBuilder.addTarget(surface);
+            mPreviewRequestBuilder.addTarget(mPreviewReader.getSurface());
+
+            mCameraDevice.createCaptureSession(Arrays.asList(surface, mPreviewReader.getSurface()),
                     new CameraCaptureSession.StateCallback() {
                         @Override
                         public void onConfigured(CameraCaptureSession cameraCaptureSession) {
@@ -188,4 +210,6 @@ public class CameraHandler {
             Log.e("mr", "stopBackgroundThread");
         }
     }
+
+
 }

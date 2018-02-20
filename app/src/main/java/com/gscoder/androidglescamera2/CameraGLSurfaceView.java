@@ -1,7 +1,8 @@
 package com.gscoder.androidglescamera2;
 
 import android.content.Context;
-import android.graphics.Bitmap;
+import android.content.res.TypedArray;
+import android.graphics.Matrix;
 import android.media.Image;
 import android.media.ImageReader;
 import android.opengl.GLSurfaceView;
@@ -9,11 +10,11 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.SystemClock;
 import android.os.Trace;
+import android.util.AttributeSet;
 import android.util.Log;
 import android.view.SurfaceHolder;
 
 import java.nio.ByteBuffer;
-import java.util.List;
 
 public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.OnImageAvailableListener {
     private static final String TAG = CameraGLSurfaceView.class.getSimpleName();
@@ -21,21 +22,34 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
     private CameraViewRenderer mCameraViewRenderer;
     private CameraHandler mCameraHandler;
 
+    private long lastProcessingTimeMs;
     private byte[][] yuvBytes;
     private boolean computing;
     private Handler handler;
     private HandlerThread handlerThread;
-    private int[] rgbBytes = null;
 
-    CameraGLSurfaceView(Context context) {
-        super ( context );
+    public CameraGLSurfaceView(Context context, AttributeSet attrs) {
+        super ( context, attrs);
+
         mCameraHandler = new CameraHandler(this);
         mCameraViewRenderer = new CameraViewRenderer(this, mCameraHandler);
+        mCameraViewRenderer.setSyncPreviewAndImageProcess(false);
+
         setEGLContextClientVersion ( 2 );
         setRenderer (mCameraViewRenderer);
         setRenderMode ( GLSurfaceView.RENDERMODE_WHEN_DIRTY );
 
         yuvBytes = new byte[3][];
+
+        TypedArray arr = context.obtainStyledAttributes(attrs, R.styleable.CameraGLSurfaceView);
+        Boolean syncPreviewAndImageProcess = arr.getBoolean(R.styleable.CameraGLSurfaceView_syncPreviewAndImageProcess, false);
+        arr.recycle();
+
+        setSyncPreviewAndImageProcess(syncPreviewAndImageProcess);
+    }
+
+    public CameraGLSurfaceView(Context context) {
+        this ( context, null);
     }
 
     public void surfaceCreated ( SurfaceHolder holder ) {
@@ -73,6 +87,14 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
 
         mCameraViewRenderer.onPause();
         super.onPause();
+    }
+
+    public void setSyncPreviewAndImageProcess (boolean value) {
+        mCameraViewRenderer.setSyncPreviewAndImageProcess(value);
+    }
+
+    public boolean gtSyncPreviewAndImageProcess () {
+        return mCameraViewRenderer.getSyncPreviewAndImageProcess();
     }
 
     protected synchronized void runInBackground(final Runnable r) {
@@ -132,12 +154,55 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
                     public void run() {
                         final long startTime = SystemClock.uptimeMillis();
 
+                        // PROCESS image here
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            Log.e(TAG, e.getStackTrace() + e.getMessage(), e);
+                        }
+
+                        lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
+
                         requestRender();
                         computing = false;
                     }
                 });
 
         Trace.endSection();
+    }
+
+    /**
+     * Options for scaling the bounds of an image to the bounds of this view.
+     */
+    public enum ScaleType {
+        /**
+         * Scale the image using {@link Matrix.ScaleToFit#FILL}.
+         */
+        FIT_XY      (1),
+        /**
+         * Scale the image using {@link Matrix.ScaleToFit#START}.
+         */
+        FIT_START   (2),
+        /**
+         * Scale the image using {@link Matrix.ScaleToFit#CENTER}.
+         * From XML, use this syntax:
+         */
+        FIT_CENTER  (3),
+        /**
+         * Scale the image using {@link Matrix.ScaleToFit#END}.
+         */
+        FIT_END     (4),
+        /**
+         * Scale the image uniformly (maintain the image's aspect ratio) so
+         * that both dimensions (width and height) of the image will be equal
+         * to or larger than the corresponding dimension of the view
+         * (minus padding). The image is then centered in the view.
+         */
+        CENTER_CROP (6);
+        ScaleType(int ni) {
+            nativeInt = ni;
+        }
+        final int nativeInt;
     }
 }
 

@@ -26,8 +26,13 @@ public class MainActivity extends FragmentActivity implements PermissionsHelper.
         ui = ui | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
         getWindow().getDecorView().setSystemUiVisibility(ui);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        mView = new CameraGLSurfaceView(this);
-        setContentView ( mView );
+
+        setContentView ( R.layout.main_layout );
+
+        mView = (CameraGLSurfaceView) findViewById(R.id.cameraGLSurfaceView);
+
+        //mView = new CameraGLSurfaceView(this);
+        //setContentView ( mView );
 
         if(PermissionsHelper.isMorHigher())
             setupPermissions();

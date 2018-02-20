@@ -10,11 +10,9 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
-import android.media.Image;
 import android.media.ImageReader;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Trace;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
@@ -29,7 +27,8 @@ public class CameraHandler {
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private String mCameraID;
     ///private Size mPreviewSize = new Size( 1920, 1080 );
-    private Size mPreviewSize = new Size( 640, 480 );
+    private Size mDesiredPreviewSize = new Size( 640, 480 );
+    private Size mPreviewSize = null;
 
     private HandlerThread mBackgroundThread;
     private Handler mBackgroundHandler;
@@ -56,11 +55,21 @@ public class CameraHandler {
     }
 
     public Size getPreviewSize() {
+        if (mPreviewSize == null) {
+            throw new RuntimeException();
+        }
         return mPreviewSize;
     }
 
-    void calcPreviewSize(Context context, final int width, final int height) {
+    double distanceSq (Size one, Size two) {
+        double dY = one.getHeight() - two.getHeight();
+        double dX = one.getWidth() - two.getWidth();
+        return dY * dY + dX * dX;
+    }
+
+    void calcPreviewSize(Context context) {
         CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
+        double distSq = Double.MAX_VALUE;
         try {
             for (String cameraID : manager.getCameraIdList()) {
                 CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraID);
@@ -71,9 +80,14 @@ public class CameraHandler {
                 mCameraID = cameraID;
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                 for ( Size psize : map.getOutputSizes(SurfaceTexture.class)) {
-                    if ( width == psize.getWidth() && height == psize.getHeight() ) {
+
+                    double tmpDistSq = distanceSq(psize, mDesiredPreviewSize);
+                    Log.i("mr", String.format("size %d x %d   %f", psize.getWidth(), psize.getHeight(), tmpDistSq));
+
+                    if ( tmpDistSq < distSq ) {
                         mPreviewSize = psize;
-                        break;
+                        distSq = tmpDistSq;
+                        Log.i("mr", String.format("mPreviewSize %d x %d", psize.getWidth(), psize.getHeight()));
                     }
                 }
                 break;
@@ -85,6 +99,7 @@ public class CameraHandler {
         } catch ( SecurityException e ) {
             Log.e("mr", "calcPreviewSize - Security Exception");
         }
+        Log.i("mr", "camera size had to be chosen");
     }
 
     void openCamera(Context contexst) {
@@ -155,8 +170,6 @@ public class CameraHandler {
 
             Surface surface = new Surface(mSurfaceTexture);
 
-            mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-
             // Create the reader for the preview frames.
             mPreviewReader =
                     ImageReader.newInstance(
@@ -164,8 +177,9 @@ public class CameraHandler {
 
             mPreviewReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
 
-            mPreviewRequestBuilder.addTarget(surface);
+            mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             mPreviewRequestBuilder.addTarget(mPreviewReader.getSurface());
+            mPreviewRequestBuilder.addTarget(surface);
 
             mCameraDevice.createCaptureSession(Arrays.asList(surface, mPreviewReader.getSurface()),
                     new CameraCaptureSession.StateCallback() {

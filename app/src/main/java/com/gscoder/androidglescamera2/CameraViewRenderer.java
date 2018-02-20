@@ -2,19 +2,21 @@ package com.gscoder.androidglescamera2;
 
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Matrix;
 import android.graphics.Point;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.SensorManager;
 import android.hardware.camera2.CameraCharacteristics;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
-import android.opengl.Matrix;
 import android.util.Log;
 import android.view.Display;
 import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.WindowManager;
+import com.gscoder.androidglescamera2.CameraGLSurfaceView.ScaleType;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -32,8 +34,12 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
             "uniform mat4 uTexRotateMatrix;\n" +
             "varying vec2 texCoord;\n" +
             "void main() {\n" +
-            "  texCoord = (uTexRotateMatrix * (uTexTransformMatrix * vTexCoord)).xy;\n" +
-            "  gl_Position = vec4 ( vPosition.x, vPosition.y, 0.0, 1.0 );\n" +
+
+            //"  texCoord = (uTexRotateMatrix * (uTexTransformMatrix * vTexCoord)).xy;\n" +
+            "  texCoord = (uTexTransformMatrix * vTexCoord).xy;\n" +
+            //"  texCoord = vTexCoord.xy;\n" +
+            //"  texCoord = (uTexRotateMatrix * vTexCoord).xy;\n" +
+            "  gl_Position = uTexRotateMatrix *  vec4 ( vPosition.x, vPosition.y, 0.0, 1.0 );\n" +
             "}";
 
     private final String cameraFragmentShader = "" +
@@ -56,31 +62,30 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private float[] mTexTransformMatrix = new float[] {1, 0, 0, 0,   0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1};
     private float[] mTexRotateMatrix = new float[] {1, 0, 0, 0,   0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1};
 
-    private CameraGLSurfaceView mView;
+    private CameraGLSurfaceView mSurfaceView;
     private CameraHandler mCameraHandler;
     private SurfaceTexture mSurfaceTexture;
+    private boolean mSyncPreviewAndImageProcess;
 
     private WindowManager mWindowManager;
     private OrientationEventListener mOrientationListener;
 
-    private int mDeviceDefaultOrientation = -1;
-
     CameraViewRenderer(CameraGLSurfaceView view, CameraHandler cameraHandler) {
-        mView = view;
+        mSurfaceView = view;
         mCameraHandler = cameraHandler;
 
         float[] vtmp = {
-                -1.0f, -1.0f,   // 0 bottom left  A
-                1.0f, -1.0f,   // 1 bottom right  B
-                -1.0f,  1.0f,   // 2 top left     C
-                1.0f,  1.0f,   // 3 top right     D
+                -1.0f, -1.0f,   // 0 bottom left   A
+                 1.0f, -1.0f,   // 1 bottom right  B
+                -1.0f,  1.0f,   // 2 top left      C
+                 1.0f,  1.0f,   // 3 top right     D
         };
 
         float[] ttmp = {
-                0.0f, 0.0f,     // 0 bottom left
-                1.0f, 0.0f,     // 1 bottom right
-                0.0f, 1.0f,     // 2 top left
-                1.0f, 1.0f      // 3 top right
+                -.5f, -.5f,     // 0 bottom left
+                1.5f, -.5f,     // 1 bottom right
+                -.5f, 1.5f,     // 2 top left
+                1.5f, 1.5f      // 3 top right
         };
 
         pVertex = ByteBuffer.allocateDirect(vtmp.length * Float.SIZE / 8).order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -91,12 +96,21 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         pTexCoord.put ( ttmp );
         pTexCoord.position(0);
 
-        Context ctx = mView.getContext();
+        Context ctx = mSurfaceView.getContext();
+        mCameraHandler.calcPreviewSize(ctx);
 
         mWindowManager = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
         mOrientationListener = new OrientationListener(ctx);
 
-        mDeviceDefaultOrientation = getDeviceDefaultOrientation();
+        mSyncPreviewAndImageProcess = false;
+    }
+
+    public void setSyncPreviewAndImageProcess (boolean value) {
+        mSyncPreviewAndImageProcess = value;
+    }
+
+    public boolean getSyncPreviewAndImageProcess () {
+        return mSyncPreviewAndImageProcess;
     }
 
     public void onResume() {
@@ -133,11 +147,10 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
         hProgram = loadShader (cameraVertexShader, cameraFragmentShader);
 
-        Point ss = new Point();
-        mView.getDisplay().getRealSize(ss);
+        //Point viewSize = new Point();
+        //mSurfaceView.getDisplay().getRealSize(viewSize);
 
-        mCameraHandler.calcPreviewSize(mView.getContext(), ss.x, ss.y);
-        mCameraHandler.openCamera(mView.getContext());
+        mCameraHandler.openCamera(mSurfaceView.getContext());
 
         mGLInit = true;
 
@@ -214,48 +227,77 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         updateViewport();
     }
 
-    int textureWidth = 0;
-    int textureHeight = 0;
 
-    private void updateViewport()
-    {
+    private void updateViewport() {
+        updateViewport(ScaleType.FIT_CENTER);
+    }
 
-        boolean swap = mView.getContext().getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
+    Matrix mMatrix = new Matrix();
+    RectF mSurfaceRect = new RectF();
+    RectF mLastImageRect = new RectF();
+    RectF mImageRect = new RectF();
+    Point mRealSize = new Point();
 
-        float imageWidth  = mCameraHandler.getPreviewSize().getWidth();
-        float imageHeight = mCameraHandler.getPreviewSize().getHeight();
+    private void updateViewport(ScaleType scaleType) {
+        boolean swap = mSurfaceView.getContext().getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
 
-        Point realSize = new Point();
-        mView.getDisplay().getRealSize(realSize);
+        int imageWidth  = !swap ? mCameraHandler.getPreviewSize().getWidth() : mCameraHandler.getPreviewSize().getHeight();
+        int imageHeight = !swap ? mCameraHandler.getPreviewSize().getHeight() : mCameraHandler.getPreviewSize().getWidth();
 
-        float surfaceWidth  = realSize.x;
-        float surfaceHeight = realSize.y;
+        mSurfaceView.getDisplay().getRealSize(mRealSize);
 
-        float scaleImage = imageWidth / imageHeight;
-        float scaleSurface = surfaceWidth / surfaceHeight;
+        mImageRect.set(0, 0, imageWidth, imageHeight);
 
-        int newTextureWidth, newTextureHeight;
+        if (scaleType == ScaleType.CENTER_CROP) {
+            float scaleImage   = (float) imageWidth / imageHeight;
+            float scaleSurface = (float) mRealSize.x / mRealSize.y;
 
-        if (scaleImage > scaleSurface) {
-            newTextureWidth  = (int) surfaceWidth;
-            newTextureHeight = (int) (surfaceWidth / scaleImage);
-        }
-        else {
-            newTextureWidth  = (int) (surfaceHeight * scaleImage);
-            newTextureHeight = (int) surfaceHeight;
-        }
-
-        if (textureWidth != newTextureWidth || textureHeight != newTextureHeight) {
+            int newTextureWidth, newTextureHeight;
             int x, y;
 
-            x = ((int) surfaceWidth  - newTextureWidth)  / 2;
-            y = ((int) surfaceHeight - newTextureHeight) / 2;
+            if (scaleImage < scaleSurface) {
+                newTextureWidth  = (int) mRealSize.x;
+                newTextureHeight = (int) (mRealSize.x / scaleImage);
+            }
+            else {
+                newTextureWidth  = (int) (mRealSize.y * scaleImage);
+                newTextureHeight = (int) mRealSize.y;
+            }
 
-            GLES20.glViewport(x, y, newTextureWidth, newTextureHeight);
+            x = ((int) mRealSize.x - newTextureWidth)  / 2;
+            y = ((int) mRealSize.y - newTextureHeight) / 2;
+
+            mImageRect.set(x, y, x + newTextureWidth, y + newTextureHeight);
+        } else {
+            Matrix.ScaleToFit scaleToFit;
+
+            switch (scaleType) {
+                case FIT_CENTER:
+                    scaleToFit = Matrix.ScaleToFit.CENTER;
+                    break;
+                case FIT_END:
+                    scaleToFit = Matrix.ScaleToFit.END;
+                    break;
+                case FIT_START:
+                    scaleToFit = Matrix.ScaleToFit.START;
+                    break;
+                case FIT_XY:
+                    scaleToFit = Matrix.ScaleToFit.FILL;
+                    break;
+                default:
+                    throw new RuntimeException("Unknown ScaleType enum value.");
+            }
+
+            mSurfaceRect.set(0, 0, mRealSize.x, mRealSize.y);
+            mMatrix.setRectToRect(mImageRect, mSurfaceRect, scaleToFit);
+            mMatrix.mapRect(mImageRect);
+        }
+
+        if (mLastImageRect != mImageRect) {
+            GLES20.glViewport((int) mImageRect.left, (int) mImageRect.top, (int) mImageRect.width(), (int) mImageRect.height());
             checkGlError("glViewport");
 
-            textureWidth  = newTextureWidth;
-            textureHeight = newTextureHeight;
+            mLastImageRect.set(mImageRect);
         }
     }
 
@@ -282,68 +324,40 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
     public synchronized void onFrameAvailable ( SurfaceTexture st ) {
         mUpdateSurfaceTexture = true;
-        mView.requestRender();
-    }
-
-    public int getDeviceDefaultOrientation() {
-        Context ctx = mView.getContext();
-        WindowManager windowManager =  (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
-
-        Configuration config = ctx.getResources().getConfiguration();
-
-        int rotation = windowManager.getDefaultDisplay().getRotation();
-
-        if ( ((rotation == Surface.ROTATION_0 ||
-                rotation == Surface.ROTATION_180) &&
-                config.orientation == Configuration.ORIENTATION_LANDSCAPE) ||
-                ((rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) &&
-                config.orientation == Configuration.ORIENTATION_PORTRAIT)) {
-            return Configuration.ORIENTATION_LANDSCAPE;
-        } else {
-            return Configuration.ORIENTATION_PORTRAIT;
-        }
+        if (!mSyncPreviewAndImageProcess)
+            mSurfaceView.requestRender();
     }
 
     private void updateTextureRotationMatrix() {
-/*
+
         Display display = mWindowManager.getDefaultDisplay();
 
         float offset = 0;
         switch (display.getRotation()) {
-            case Surface.ROTATION_180:
-            case Surface.ROTATION_270:
+            case Surface.ROTATION_0:
+            case Surface.ROTATION_90:
                 offset = 180;
                 break;
         }
 
-        boolean frontFacing = mCameraHandler.getFacing() == CameraCharacteristics.LENS_FACING_FRONT;
+        Log.i(TAG, String.format("OFFSET: %f", offset));
 
-        if (mView.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
-            Matrix.setRotateM(mTexRotateMatrix, 0, 90.0f + offset, 0.f, 0f, 1f);
-            Matrix.transposeM(mTexRotateMatrix, 0, mTexRotateMatrix,  0);
+        android.opengl.Matrix.setRotateM(mTexRotateMatrix, 0, offset, 0f, 0f, 1f);
+
+        if (mSurfaceView.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+            android.opengl.Matrix.setRotateM(mTexRotateMatrix, 0, -90.0f + offset, 0f, 0f, 1f);
+            Log.i(TAG, String.format("rotate: 0, %f x, 0.f, 0f, 1f", 90.0f + offset));
+            //Matrix.scaleM(mTexRotateMatrix, 0, mTexRotateMatrix, 0, 1, -1, 1f);
         } else {
-            Matrix.setRotateM(mTexRotateMatrix, 0, 0.0f + offset, 0f, 0f, 1f);
-            //Matrix.transposeM(mTexRotateMatrix, 0, mTexRotateMatrix,  0);
+           // Matrix.setRotateM(mTexRotateMatrix, 0, offset, 0f, 0f, 1f);
+            Log.i(TAG, String.format("rotate: 0, %f x, 0.f, 0f, 1f", offset));
         }
-*/
-/*
-        if (mView.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
-            Matrix.setRotateM(mTexTransformMatrix, 0, 90.0f + offset, 0f, 0f, 1f);
-            NVideoFormat format = CameraDeviceManager.getCamera(mCameraId).getCurrentFormat();
-            float ar = (float) format.getWidth() / format.getHeight();
-            if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
-                Matrix.scaleM(mModelOrientation, 0, mCameraOrientation, 0, ar, -ar, 1f);
-            } else {
-                Matrix.scaleM(mModelOrientation, 0, mCameraOrientation, 0, ar, ar, 1f);
-            }
-        } else {
-            //Matrix.setRotateM(mTexTransformMatrix, 0, 0.0f + offset, 0f, 0f, 1f);
-            if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
-                Matrix.scaleM(mModelOrientation, 0, mCameraOrientation, 0, -1, 1, 1f);
-            } else {
-                Matrix.scaleM(mModelOrientation, 0, mCameraOrientation, 0, 1f, 1f, 1f);
-            }
-        }*/
+
+        int facing = mCameraHandler.getFacing();
+
+        if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
+            //Matrix.scaleM(mTexRotateMatrix, 0, mTexRotateMatrix, 0, -1, 1, 1f);
+        }
     }
 
     private static int loadShader ( String vss, String fss ) {
@@ -418,13 +432,13 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
     class OrientationListener extends OrientationEventListener {
         OrientationListener(Context context) {
-            super(context, SensorManager.SENSOR_DELAY_NORMAL);
+            super(context, SensorManager.SENSOR_DELAY_UI);
         }
 
         @Override
         public void onOrientationChanged(int orientation) {
-            //Log.v(TAG, "Orientation changed to " + orientation);
-            //updateTextureMatrix(orientation);
+            // Force orientation recheck for case when 180 screen rotatation doesn't fire onSurfaceChanged.
+            updateTextureRotationMatrix();
         }
     };
 }

@@ -80,15 +80,18 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
     @Override
     public void onResume() {
         super.onResume();
-        mCameraViewRenderer.onResume();
 
         handlerThread = new HandlerThread("inference");
         handlerThread.start();
         handler = new Handler(handlerThread.getLooper());
+
+        mCameraViewRenderer.onResume();
     }
 
     @Override
     public void onPause() {
+        mCameraViewRenderer.onPause();
+
         handlerThread.quitSafely();
         try {
             handlerThread.join();
@@ -98,7 +101,6 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
             Log.e(TAG, e.getMessage());
         }
 
-        mCameraViewRenderer.onPause();
         super.onPause();
     }
 
@@ -246,4 +248,3 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
         void onBitmapAvailable(Bitmap var1);
     }
 }
-

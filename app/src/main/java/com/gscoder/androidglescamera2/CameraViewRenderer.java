@@ -31,15 +31,10 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private final String cameraVertexShader = "" +
             "attribute vec2 vPosition;\n" +
             "attribute vec4 vTexCoord;\n" +
-            "uniform mat4 uTexTransformMatrix;\n" +
             "uniform mat4 uTexRotateMatrix;\n" +
             "varying vec2 texCoord;\n" +
             "void main() {\n" +
-
-            //"  texCoord = (uTexRotateMatrix * (uTexTransformMatrix * vTexCoord)).xy;\n" +
-            "  texCoord = (uTexTransformMatrix * vTexCoord).xy;\n" +
-            //"  texCoord = vTexCoord.xy;\n" +
-            //"  texCoord = (uTexRotateMatrix * vTexCoord).xy;\n" +
+            "  texCoord = vTexCoord.xy;\n" +
             "  gl_Position = uTexRotateMatrix *  vec4 ( vPosition.x, vPosition.y, 0.0, 1.0 );\n" +
             "}";
 
@@ -60,7 +55,6 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private boolean mGLInit = false;
     private boolean mUpdateSurfaceTexture = false;
 
-    private float[] mTexTransformMatrix = new float[] {1, 0, 0, 0,   0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1};
     private float[] mTexRotateMatrix = new float[] {1, 0, 0, 0,   0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1};
 
     private CameraGLSurfaceView mSurfaceView;
@@ -145,7 +139,6 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         mSurfaceTexture = new SurfaceTexture ( hTex[0] );
         mSurfaceTexture.setDefaultBufferSize(640, 480);
         mSurfaceTexture.setOnFrameAvailableListener(this);
-        mSurfaceTexture.getTransformMatrix(mTexTransformMatrix);
 
         mCameraHandler.setSurfaceTexture(mSurfaceTexture);
 
@@ -175,8 +168,6 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
             }
         }
 
-        //mSurfaceTexture.getTransformMatrix(mTexTransformMatrix);
-
         GLES20.glUseProgram(hProgram);
         checkGlError("glUseProgram");
 
@@ -184,12 +175,6 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         checkGlError("glGetUniformLocation");
 
         GLES20.glUniformMatrix4fv(trmh, 1, false, mTexRotateMatrix, 0);
-        checkGlError("glUniformMatrix4fv");
-
-        int ttmh = GLES20.glGetUniformLocation ( hProgram, "uTexTransformMatrix" );
-        checkGlError("glGetUniformLocation");
-
-        GLES20.glUniformMatrix4fv(ttmh, 1, false, mTexTransformMatrix, 0);
         checkGlError("glUniformMatrix4fv");
 
         int ph = GLES20.glGetAttribLocation(hProgram, "vPosition");

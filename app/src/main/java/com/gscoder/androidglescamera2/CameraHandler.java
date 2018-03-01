@@ -16,7 +16,6 @@ import android.os.HandlerThread;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
-import android.view.TextureView;
 
 import java.util.Arrays;
 import java.util.concurrent.Semaphore;
@@ -29,7 +28,6 @@ public class CameraHandler {
     private CameraCaptureSession mCaptureSession;
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private String mCameraID;
-    ///private Size mPreviewSize = new Size( 1920, 1080 );
     private Size mDesiredPreviewSize = new Size( 640, 480 );
     private Size mPreviewSize = null;
 

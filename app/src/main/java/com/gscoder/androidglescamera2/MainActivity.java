@@ -1,20 +1,24 @@
 package com.gscoder.androidglescamera2;
 
 import android.Manifest;
-import android.app.Activity;
+import android.graphics.Bitmap;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.Toast;
 
 import java.util.Arrays;
 
-public class MainActivity extends FragmentActivity implements PermissionsHelper.PermissionsListener {
+public class MainActivity extends FragmentActivity implements PermissionsHelper.PermissionsListener, CameraGLSurfaceView.OnBitmapAvailableListener {
     private static final String TAG = MainActivity.class.getSimpleName();
-    private CameraGLSurfaceView mView;
+    private CameraGLSurfaceView mCameraGLSurfaceView;
+    private ImageView mImageView;
     private PermissionsHelper mPermissionsHelper;
     private boolean mPermissionsSatisfied = false;
 
@@ -29,10 +33,9 @@ public class MainActivity extends FragmentActivity implements PermissionsHelper.
 
         setContentView ( R.layout.main_layout );
 
-        mView = (CameraGLSurfaceView) findViewById(R.id.cameraGLSurfaceView);
-
-        //mView = new CameraGLSurfaceView(this);
-        //setContentView ( mView );
+        mCameraGLSurfaceView = (CameraGLSurfaceView) findViewById(R.id.cameraGLSurfaceView);
+        mImageView = (ImageView) findViewById(R.id.imageView);
+        mCameraGLSurfaceView.setOnBitmapAvailableListener(this);
 
         if(PermissionsHelper.isMorHigher())
             setupPermissions();
@@ -41,7 +44,7 @@ public class MainActivity extends FragmentActivity implements PermissionsHelper.
     @Override
     protected void onResume() {
         super.onResume();
-        mView.onResume();
+        mCameraGLSurfaceView.onResume();
 
         if(PermissionsHelper.isMorHigher() && !mPermissionsSatisfied) {
             if(!mPermissionsHelper.checkPermissions())
@@ -53,7 +56,7 @@ public class MainActivity extends FragmentActivity implements PermissionsHelper.
 
     @Override
     protected void onPause() {
-        mView.onPause();
+        mCameraGLSurfaceView.onPause();
         super.onPause();
     }
 
@@ -77,5 +80,15 @@ public class MainActivity extends FragmentActivity implements PermissionsHelper.
         mPermissionsSatisfied = false;
         Toast.makeText(this, "shadercam needs all permissions to function, please try again.", Toast.LENGTH_LONG).show();
         this.finish();
+    }
+
+    @Override
+    public void onBitmapAvailable(final Bitmap var1) {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                mImageView.setImageBitmap(var1);
+            }
+        });
     }
 }

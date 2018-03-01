@@ -15,6 +15,7 @@ import android.util.Log;
 import android.view.Display;
 import android.view.OrientationEventListener;
 import android.view.Surface;
+import android.view.TextureView;
 import android.view.WindowManager;
 import com.gscoder.androidglescamera2.CameraGLSurfaceView.ScaleType;
 
@@ -82,10 +83,10 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         };
 
         float[] ttmp = {
-                -.5f, -.5f,     // 0 bottom left
-                1.5f, -.5f,     // 1 bottom right
-                -.5f, 1.5f,     // 2 top left
-                1.5f, 1.5f      // 3 top right
+                0.0f, 0.0f,     // 0 bottom left
+                1.0f, 0.0f,     // 1 bottom right
+                0.0f, 1.0f,     // 2 top left
+                1.0f, 1.0f      // 3 top right
         };
 
         pVertex = ByteBuffer.allocateDirect(vtmp.length * Float.SIZE / 8).order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -97,10 +98,15 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         pTexCoord.position(0);
 
         Context ctx = mSurfaceView.getContext();
-        mCameraHandler.calcPreviewSize(ctx);
+        if (!view.isInEditMode()) {
+            mCameraHandler.calcPreviewSize(ctx);
+        }
 
         mWindowManager = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
-        mOrientationListener = new OrientationListener(ctx);
+
+        if (!view.isInEditMode()) {
+            mOrientationListener = new OrientationListener(ctx);
+        }
 
         mSyncPreviewAndImageProcess = false;
     }
@@ -137,6 +143,7 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     public void onSurfaceCreated (GL10 unused, javax.microedition.khronos.egl.EGLConfig eglConfig ) {
         initTex();
         mSurfaceTexture = new SurfaceTexture ( hTex[0] );
+        mSurfaceTexture.setDefaultBufferSize(640, 480);
         mSurfaceTexture.setOnFrameAvailableListener(this);
         mSurfaceTexture.getTransformMatrix(mTexTransformMatrix);
 
@@ -146,9 +153,6 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         checkGlError("glClearColor");
 
         hProgram = loadShader (cameraVertexShader, cameraFragmentShader);
-
-        //Point viewSize = new Point();
-        //mSurfaceView.getDisplay().getRealSize(viewSize);
 
         mCameraHandler.openCamera(mSurfaceView.getContext());
 
@@ -229,7 +233,7 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
 
     private void updateViewport() {
-        updateViewport(ScaleType.FIT_CENTER);
+        updateViewport(ScaleType.CENTER_CROP);
     }
 
     Matrix mMatrix = new Matrix();
@@ -247,6 +251,8 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         mSurfaceView.getDisplay().getRealSize(mRealSize);
 
         mImageRect.set(0, 0, imageWidth, imageHeight);
+
+//        mImageRect.set(0, 0, mRealSize.x, mRealSize.y);
 
         if (scaleType == ScaleType.CENTER_CROP) {
             float scaleImage   = (float) imageWidth / imageHeight;

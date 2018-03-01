@@ -1,7 +1,9 @@
 package com.gscoder.androidglescamera2;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import android.media.Image;
 import android.media.ImageReader;
@@ -12,6 +14,7 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.Size;
 import android.view.SurfaceHolder;
 
 import java.nio.ByteBuffer;
@@ -24,12 +27,20 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
 
     private long lastProcessingTimeMs;
     private byte[][] yuvBytes;
+    private int[] rgbBytes = null;
     private boolean computing;
     private Handler handler;
     private HandlerThread handlerThread;
+    private Size previewSize = new Size(640, 480);
+    private Bitmap rgbFrameBitmap = null;
+    private Activity mActivity;
 
-    public CameraGLSurfaceView(Context context, AttributeSet attrs) {
-        super ( context, attrs);
+    private OnBitmapAvailableListener mOnBitmapAvailableListener = null;
+
+    public CameraGLSurfaceView(Context context, AttributeSet attributes) {
+        super ( context, attributes);
+
+        mActivity = (Activity) context;
 
         mCameraHandler = new CameraHandler(this);
         mCameraViewRenderer = new CameraViewRenderer(this, mCameraHandler);
@@ -40,10 +51,12 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
         setRenderMode ( GLSurfaceView.RENDERMODE_WHEN_DIRTY );
 
         yuvBytes = new byte[3][];
+        rgbBytes = new int[previewSize.getWidth() * previewSize.getHeight()];
+        rgbFrameBitmap = Bitmap.createBitmap(previewSize.getWidth(), previewSize.getHeight(), Bitmap.Config.ARGB_8888);
 
-        TypedArray arr = context.obtainStyledAttributes(attrs, R.styleable.CameraGLSurfaceView);
-        Boolean syncPreviewAndImageProcess = arr.getBoolean(R.styleable.CameraGLSurfaceView_syncPreviewAndImageProcess, false);
-        arr.recycle();
+        TypedArray attrs = context.obtainStyledAttributes(attributes, R.styleable.CameraGLSurfaceView);
+        Boolean syncPreviewAndImageProcess = attrs.getBoolean(R.styleable.CameraGLSurfaceView_syncPreviewAndImageProcess, false);
+        attrs.recycle();
 
         setSyncPreviewAndImageProcess(syncPreviewAndImageProcess);
     }
@@ -138,6 +151,20 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
             final Image.Plane[] planes = image.getPlanes();
             fillBytes(planes, yuvBytes);
 
+            final int yRowStride = planes[0].getRowStride();
+            final int uvRowStride = planes[1].getRowStride();
+            final int uvPixelStride = planes[1].getPixelStride();
+            ImageUtils.convertYUV420ToARGB8888(
+                    yuvBytes[0],
+                    yuvBytes[1],
+                    yuvBytes[2],
+                    previewSize.getWidth(),
+                    previewSize.getHeight(),
+                    yRowStride,
+                    uvRowStride,
+                    uvPixelStride,
+                    rgbBytes);
+
             image.close();
         } catch (final Exception e) {
             if (image != null) {
@@ -148,11 +175,17 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
             return;
         }
 
+        rgbFrameBitmap.setPixels(rgbBytes, 0, previewSize.getWidth(), 0, 0, previewSize.getWidth(), previewSize.getHeight());
+
         runInBackground(
                 new Runnable() {
                     @Override
                     public void run() {
                         final long startTime = SystemClock.uptimeMillis();
+
+                        if (mOnBitmapAvailableListener != null) {
+                            mOnBitmapAvailableListener.onBitmapAvailable(rgbFrameBitmap);
+                        }
 
                         // PROCESS image here
                         try {
@@ -203,6 +236,14 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
             nativeInt = ni;
         }
         final int nativeInt;
+    }
+
+    public void setOnBitmapAvailableListener(OnBitmapAvailableListener listener) {
+        mOnBitmapAvailableListener = listener;
+    }
+
+    public interface OnBitmapAvailableListener {
+        void onBitmapAvailable(Bitmap var1);
     }
 }
 

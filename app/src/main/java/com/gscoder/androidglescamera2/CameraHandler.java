@@ -16,12 +16,15 @@ import android.os.HandlerThread;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
+import android.view.TextureView;
 
 import java.util.Arrays;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 public class CameraHandler {
+    private static final String TAG = CameraHandler.class.getSimpleName();
+
     private CameraDevice mCameraDevice;
     private CameraCaptureSession mCaptureSession;
     private CaptureRequest.Builder mPreviewRequestBuilder;
@@ -166,9 +169,11 @@ public class CameraHandler {
 
     protected void createCameraPreviewSession() {
         try {
-            mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+            mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
 
-            Surface surface = new Surface(mSurfaceTexture);
+            mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+            final Surface surface = new Surface(mSurfaceTexture);
+            mPreviewRequestBuilder.addTarget(surface);;
 
             // Create the reader for the preview frames.
             mPreviewReader =
@@ -176,10 +181,7 @@ public class CameraHandler {
                             mPreviewSize.getWidth(), mPreviewSize.getHeight(), ImageFormat.YUV_420_888, 2);
 
             mPreviewReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
-
-            mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             mPreviewRequestBuilder.addTarget(mPreviewReader.getSurface());
-            mPreviewRequestBuilder.addTarget(surface);
 
             mCameraDevice.createCaptureSession(Arrays.asList(surface, mPreviewReader.getSurface()),
                     new CameraCaptureSession.StateCallback() {
@@ -195,18 +197,20 @@ public class CameraHandler {
 
                                 mCaptureSession.setRepeatingRequest(mPreviewRequestBuilder.build(), null, mBackgroundHandler);
                             } catch (CameraAccessException e) {
-                                Log.e("mr", "createCaptureSession");
+                                Log.e(TAG, "createCaptureSession");
                             }
                         }
                         @Override
                         public void onConfigureFailed(CameraCaptureSession cameraCaptureSession) {
+                            Log.e(TAG, "onConfigureFailed");
                         }
                     }, null
             );
         } catch (CameraAccessException e) {
-            Log.e("mr", "createCameraPreviewSession");
+            Log.e(TAG, "createCameraPreviewSession");
         }
     }
+
 
     protected void startBackgroundThread() {
         mBackgroundThread = new HandlerThread("CameraBackground");

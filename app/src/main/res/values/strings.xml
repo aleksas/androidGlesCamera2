@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">androidGlesCamera2</string>
+    <string name="bitmap_preview">Bitmap preview</string>
 </resources>

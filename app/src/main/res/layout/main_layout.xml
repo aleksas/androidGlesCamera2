@@ -10,7 +10,9 @@
         android:layout_height="fill_parent"
         android:layout_alignParentStart="true"
         android:layout_alignParentTop="true"
-        androidglescamera2:syncPreviewAndImageProcess="false" />
+        androidglescamera2:syncPreviewAndImageProcess="false"
+        androidglescamera2:desiredWidth="640"
+        androidglescamera2:desiredHeight="480"/>
 
     <ImageView
         android:id="@+id/imageView"

@@ -12,6 +12,7 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.util.Log;
+import android.util.Size;
 import android.view.Display;
 import android.view.OrientationEventListener;
 import android.view.Surface;
@@ -65,6 +66,8 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private WindowManager mWindowManager;
     private OrientationEventListener mOrientationListener;
 
+    private Size mPreviewSize = null;
+
     CameraViewRenderer(CameraGLSurfaceView view, CameraHandler cameraHandler) {
         mSurfaceView = view;
         mCameraHandler = cameraHandler;
@@ -94,6 +97,7 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         Context ctx = mSurfaceView.getContext();
         if (!view.isInEditMode()) {
             mCameraHandler.calcPreviewSize(ctx);
+            mPreviewSize = mCameraHandler.getPreviewSize();
         }
 
         mWindowManager = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
@@ -137,7 +141,7 @@ public class CameraViewRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     public void onSurfaceCreated (GL10 unused, javax.microedition.khronos.egl.EGLConfig eglConfig ) {
         initTex();
         mSurfaceTexture = new SurfaceTexture ( hTex[0] );
-        mSurfaceTexture.setDefaultBufferSize(640, 480);
+        mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         mSurfaceTexture.setOnFrameAvailableListener(this);
 
         mCameraHandler.setSurfaceTexture(mSurfaceTexture);

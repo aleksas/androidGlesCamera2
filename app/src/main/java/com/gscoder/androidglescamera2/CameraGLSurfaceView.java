@@ -31,18 +31,23 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
     private boolean computing;
     private Handler handler;
     private HandlerThread handlerThread;
-    private Size previewSize = new Size(640, 480);
+    private Size previewSize = null;
     private Bitmap rgbFrameBitmap = null;
-    private Activity mActivity;
 
     private OnBitmapAvailableListener mOnBitmapAvailableListener = null;
 
     public CameraGLSurfaceView(Context context, AttributeSet attributes) {
         super ( context, attributes);
 
-        mActivity = (Activity) context;
+        TypedArray attrs = context.obtainStyledAttributes(attributes, R.styleable.CameraGLSurfaceView);
+        Boolean syncPreviewAndImageProcess = attrs.getBoolean(R.styleable.CameraGLSurfaceView_syncPreviewAndImageProcess, false);
+        Integer desiredWidth = attrs.getInt(R.styleable.CameraGLSurfaceView_desiredWidth, 640);
+        Integer desiredHeight = attrs.getInt(R.styleable.CameraGLSurfaceView_desiredHeight, 480);
+        attrs.recycle();
 
-        mCameraHandler = new CameraHandler(this);
+        previewSize = new Size(desiredWidth, desiredHeight);
+
+        mCameraHandler = new CameraHandler(this, previewSize);
         mCameraViewRenderer = new CameraViewRenderer(this, mCameraHandler);
         mCameraViewRenderer.setSyncPreviewAndImageProcess(false);
 
@@ -53,10 +58,6 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
         yuvBytes = new byte[3][];
         rgbBytes = new int[previewSize.getWidth() * previewSize.getHeight()];
         rgbFrameBitmap = Bitmap.createBitmap(previewSize.getWidth(), previewSize.getHeight(), Bitmap.Config.ARGB_8888);
-
-        TypedArray attrs = context.obtainStyledAttributes(attributes, R.styleable.CameraGLSurfaceView);
-        Boolean syncPreviewAndImageProcess = attrs.getBoolean(R.styleable.CameraGLSurfaceView_syncPreviewAndImageProcess, false);
-        attrs.recycle();
 
         setSyncPreviewAndImageProcess(syncPreviewAndImageProcess);
     }

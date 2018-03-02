@@ -28,7 +28,7 @@ public class CameraHandler {
     private CameraCaptureSession mCaptureSession;
     private CaptureRequest.Builder mPreviewRequestBuilder;
     private String mCameraID;
-    private Size mDesiredPreviewSize = new Size( 640, 480 );
+    private Size mDesiredPreviewSize = null;
     private Size mPreviewSize = null;
 
     private HandlerThread mBackgroundThread;
@@ -43,8 +43,9 @@ public class CameraHandler {
 
     private ImageReader.OnImageAvailableListener mOnImageAvailableListener;
 
-    public CameraHandler(ImageReader.OnImageAvailableListener onImageAvailableListener) {
+    public CameraHandler(ImageReader.OnImageAvailableListener onImageAvailableListener, Size desiredPreviewSize) {
         mOnImageAvailableListener = onImageAvailableListener;
+        mDesiredPreviewSize = desiredPreviewSize;
     }
 
     public void setSurfaceTexture(SurfaceTexture surfaceTexture) {

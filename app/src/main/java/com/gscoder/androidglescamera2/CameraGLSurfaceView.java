@@ -1,6 +1,5 @@
 package com.gscoder.androidglescamera2;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
@@ -36,6 +35,11 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
 
     private OnBitmapAvailableListener mOnBitmapAvailableListener = null;
 
+    public CameraGLSurfaceView(Context context, boolean syncPreviewAndImageProcess, Size desiredResolution) {
+        super ( context);
+        init(syncPreviewAndImageProcess, desiredResolution);
+    }
+
     public CameraGLSurfaceView(Context context, AttributeSet attributes) {
         super ( context, attributes);
 
@@ -45,7 +49,11 @@ public class CameraGLSurfaceView extends GLSurfaceView implements ImageReader.On
         Integer desiredHeight = attrs.getInt(R.styleable.CameraGLSurfaceView_desiredHeight, 480);
         attrs.recycle();
 
-        previewSize = new Size(desiredWidth, desiredHeight);
+        init(syncPreviewAndImageProcess, new Size(desiredWidth, desiredHeight));
+    }
+
+    private void init(boolean syncPreviewAndImageProcess, Size desiredResolution) {
+        previewSize = new Size(desiredResolution.getWidth(), desiredResolution.getHeight());
 
         mCameraHandler = new CameraHandler(this, previewSize);
         mCameraViewRenderer = new CameraViewRenderer(this, mCameraHandler);
